@@ -1,0 +1,75 @@
+GenerateHighlightedTegahedron[m_, n_] := Module[
+  {horizontalPointQuantity, verticalPolygonOrder, verticalLayersQuantity, hPoints, vPoints, 
+   horizontalLengths, originalWidth, filteredVYSortedUniqueList, hPointsList, cumulativeDz, randomPoint},
+  horizontalPointQuantity = 4*m + 2;
+  verticalPolygonOrder = 4*n + 2;
+  verticalLayersQuantity = Ceiling[(4*n + 2)/4];
+  ClearAll[OrderPointsClockwise3D];
+  
+  OrderPointsClockwise3D[pts_, clockwise_: True] := Module[
+    {normal, plane, projectedPts, centroid, angles, sortedPts},
+    normal = Cross[pts[[2]] - pts[[1]], pts[[3]] - pts[[1]]];
+    plane = Ordering[Abs[normal], -1][[1]];
+    projectedPts = Delete[#, plane] & /@ pts;
+    centroid = Mean[projectedPts];
+    angles = ArcTan[#[[1]] - centroid[[1]], #[[2]] - centroid[[2]]] & /@ projectedPts;
+    sortedPts = pts[[Ordering[angles]]];
+    If[clockwise, Reverse[sortedPts], sortedPts]
+  ];
+  
+  scaleXYKeepZ[points_, factor_] := ({factor #[[1]], factor #[[2]], #[[3]]} & /@ points);
+  
+  hPoints = OrderPointsClockwise3D[{#1, #2, 0} & @@@ N[PolygonCoordinates[RegularPolygon[horizontalPointQuantity]]]];
+  vPoints = OrderPointsClockwise3D[{#1, #2, 0} & @@@ N[PolygonCoordinates[RegularPolygon[verticalPolygonOrder]]]];
+  
+  horizontalLengths = Abs[Subtract @@@ (#[[All, 1]] & /@ GatherBy[vPoints, #[[2]] &])];
+  originalWidth = horizontalLengths[[1]];
+  
+  filteredVYSortedUniqueList = 
+    Values@GroupBy[Select[SortBy[vPoints, (N[#[[2]]]) &], #[[2]] >= 0 &], #[[2]] &, First];
+  
+  hPointsList = {};
+  cumulativeDz = 0;
+  
+  Do[
+    newWidth = horizontalLengths[[i]];
+    scalingFactor = newWidth / originalWidth;
+    dz = filteredVYSortedUniqueList[[i]][[2]] - filteredVYSortedUniqueList[[i - 1]][[2]];
+    cumulativeDz += dz;
+    AppendTo[hPointsList, scaleXYKeepZ[hPoints, scalingFactor] + Threaded[{0, 0, cumulativeDz}]];
+    , {i, 2, verticalLayersQuantity}];
+  
+  hPointsList = Prepend[hPointsList, hPoints];
+
+  randomPoint = RandomChoice[Flatten[hPointsList, 1]]; (* Pick a random vertex *)
+
+  Show[
+    Graphics3D[{
+      (* Draw all points normally: Green for equator, Monochrome for the rest *)
+      Flatten[Table[
+        {PointSize[Large],
+         If[i == 1, Green, (* Green equator *)
+          RGBColor[1/(verticalLayersQuantity - i + 1), 
+                   1/(verticalLayersQuantity - i + 1), 
+                   1/(verticalLayersQuantity - i + 1)]],
+         Point /@ hPointsList[[i]]},
+        {i, 1, verticalLayersQuantity}], 1],
+
+      (* Draw connecting lines *)
+      Flatten[Table[{Black, Line[Append[hPointsList[[i]], First[hPointsList[[i]]]]]}, 
+        {i, 1, verticalLayersQuantity}], 1],
+      
+      Flatten[Table[Table[Line[{hPointsList[[j]][[i]], hPointsList[[j + 1]][[i]]}], 
+        {i, Length[hPoints]}], {j, 1, verticalLayersQuantity - 1}], 1],
+
+      (* Draw the larger red dot at the randomly chosen point *)
+      {PointSize[0.025], Red, Opacity[1],Point[randomPoint]}
+    }, 
+    Boxed -> False, AspectRatio -> Automatic, Axes -> False, ImageSize -> Large],
+    ViewPoint -> {0, \[Infinity], 0}
+  ]
+
+]
+
+GenerateHighlightedTegahedron[2, 2]
+ 
